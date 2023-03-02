@@ -1,12 +1,3 @@
-package schema2code
-
-import (
-	"encoding/json"
-	"errors"
-	"math"
-	"regexp"
-)
-
 type Null struct{}
 
 func IntegerValidation(mini, maxi float64, useMini, useMaxi, exMini, exMaxi bool, multiple int, useMultiple bool, data *int) bool {

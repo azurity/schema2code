@@ -12,6 +12,14 @@ type CommonConfig struct {
 	RootType string
 }
 
+type IConfig interface {
+	Common() *CommonConfig
+}
+
+func (c *CommonConfig) Common() *CommonConfig {
+	return c
+}
+
 type TypeDesc struct {
 	Path         []string
 	RenderedName string
@@ -44,7 +52,7 @@ func Generate(reader io.Reader, writer io.Writer, config interface{}) error {
 		return err
 	}
 
-	casedConfig := config.(*CommonConfig)
+	casedConfig := config.(IConfig).Common()
 	types := map[string]*TypeDesc{}
 	if schema.ObjectAsType != nil {
 		if casedConfig.RootType == "" {

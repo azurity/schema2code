@@ -381,7 +381,7 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 	imports := map[string]interface{}{
 		"encoding/json": struct{}{},
 		"errors":        struct{}{},
-		"mah":           struct{}{},
+		"math":          struct{}{},
 		"regexp":        struct{}{},
 	}
 
