@@ -41,21 +41,21 @@ func formatName(name string) string {
 	return strings.ToUpper(snake[:1]) + snake[1:]
 }
 
-func generateNull(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+func generateNull(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	writer.Write("*null")
-	return nil
+	return true, nil
 }
 
-func generateBoolean(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+func generateBoolean(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*bool")
 	} else {
 		writer.Write("bool")
 	}
-	return nil
+	return true, nil
 }
 
-func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*int")
 	} else {
@@ -101,10 +101,10 @@ func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, d
 		validationCode.Dedent()
 		validationCode.Write("}")
 	}
-	return nil
+	return !(hasMini || hasMaxi || useMultiple), nil
 }
 
-func generateNumber(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+func generateNumber(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*float64")
 	} else {
@@ -150,16 +150,17 @@ func generateNumber(ctx *Context, path *Path, imports map[string]interface{}, de
 		validationCode.Dedent()
 		validationCode.Write("}")
 	}
-	return nil
+	return !(hasMini || hasMaxi || useMultiple), nil
 }
 
-func generateString(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+func generateString(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*")
 	}
 	if desc.Format != nil {
 		// TODO:
 	}
+	writer.Write("string")
 	minLen := 0
 	maxLen := 0
 	useMinLength := false
@@ -204,15 +205,15 @@ func generateString(ctx *Context, path *Path, imports map[string]interface{}, de
 		validationCode.Dedent()
 		validationCode.Write("}")
 	}
-	return nil
+	return !(useMinLength || useMaxLength || desc.Pattern != nil), nil
 }
 
-func generateArray(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+func generateArray(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if desc.AdditionalItems != nil {
-		return errors.New("only support single type array")
+		return false, errors.New("only support single type array")
 	}
 	if desc.Items == nil {
-		return errors.New("array must have item type")
+		return false, errors.New("array must have item type")
 	}
 	writer.Write("[]")
 	arrayName := strings.Join(path.namedPath, ".")
@@ -248,27 +249,29 @@ func generateArray(ctx *Context, path *Path, imports map[string]interface{}, des
 
 	validationCode.Write(fmt.Sprintf("for index, item := range %s {", arrayName))
 	validationCode.Indent()
-	err := generateType(ctx, &Path{
+	ignore, err := generateType(ctx, &Path{
 		namedPath: append(append([]string{}, path.namedPath[:len(path.namedPath)-1]...), path.namedPath[len(path.namedPath)-1]+"[index]"),
 		quotePath: append(append([]string{}, path.quotePath...), "index"),
 	}, imports, desc.Items, false, writer, globalCode, validationCode)
 	if err != nil {
-		return err
+		return false, err
 	}
 	validationCode.Dedent()
 	validationCode.Write("}")
 	validationCode.Dedent()
 	validationCode.Write("}")
-	return nil
+	return ignore && !(desc.MinItems != nil || desc.MaxItems != nil), nil
 }
 
-func generateObject(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+func generateObject(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*struct{")
 	} else {
 		writer.Write("struct{")
 	}
 	writer.Indent()
+
+	globalIgnore := true
 
 	required := desc.Required
 	if required == nil {
@@ -282,22 +285,24 @@ func generateObject(ctx *Context, path *Path, imports map[string]interface{}, de
 	}
 
 	for name, value := range desc.Properties {
-		propOptional := false
+		propOptional := true
 		for _, item := range required {
 			if name == item {
-				propOptional = true
+				propOptional = false
 				break
 			}
 		}
 		writer.CommonLine()
 		writer.Write(fmt.Sprintf("%s ", name))
-		err := generateType(ctx, &Path{
+		ignore, err := generateType(ctx, &Path{
 			namedPath: append(append([]string{}, path.namedPath...), formatName(name)),
 			quotePath: append(append([]string{}, path.quotePath...), "\""+name+"\""),
 		}, imports, value, propOptional, writer, globalCode, validationCode)
 		if err != nil {
-			return err
+			return false, err
 		}
+
+		globalIgnore = globalIgnore && ignore
 
 		writer.Write(fmt.Sprintf(" `json:\"%s\"`", name))
 	}
@@ -309,30 +314,27 @@ func generateObject(ctx *Context, path *Path, imports map[string]interface{}, de
 
 	writer.Dedent()
 	writer.Write("}")
-	return nil
+	return globalIgnore, nil
 }
 
-func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
+// ignore value & error
+func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if desc == nil {
-		return errors.New("must define type impl")
-	}
-	if len(desc.Type) != 1 {
-		// TODO: try union later by use interface{}
-		return errors.New("multiple type is not supported")
+		return false, errors.New("must define type impl")
 	}
 	if desc.Ref != nil {
 		parts := strings.Split(*desc.Ref, "/")
 		if parts[0] != "#" {
-			return errors.New("only local $ref is support")
+			return false, errors.New("only local $ref is support")
 		}
 		parts = parts[1:]
 		realName := []string{}
 		for i, item := range parts {
-			if i%2 == 0 {
+			if i%2 != 0 {
 				realName = append(realName, formatName(item))
 			} else {
-				if item != "$refs" && item != "definitions" {
-					return errors.New("wrong $ref format")
+				if item != "$defs" && item != "definitions" {
+					return false, errors.New("wrong $ref format")
 				}
 			}
 		}
@@ -340,7 +342,11 @@ func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc
 			writer.Write("*")
 		}
 		writer.Write(strings.Join(realName, ""))
-		return nil
+		return true, nil
+	}
+	if len(desc.Type) != 1 {
+		// TODO: try union later by use interface{}
+		return false, errors.New("multiple type is not supported")
 	}
 	// TODO: impl enum here
 	switch desc.Type[0] {
@@ -359,7 +365,7 @@ func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc
 	case schemas.TypeNameObject:
 		return generateObject(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
 	default:
-		return errors.New(fmt.Sprintf("unknown type %s", desc.Type[0]))
+		return false, errors.New(fmt.Sprintf("unknown type %s", desc.Type[0]))
 	}
 }
 
@@ -407,10 +413,10 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 		validationWriter.CommonLine()
 		validationWriter.Write(fmt.Sprintf("type internal %s", value.RenderedName))
 		validationWriter.CommonLine()
-		validationWriter.Write("main := internal{}\n\terr = json.Unmarshal(buffer, &main)\n\tif err != nil {\n\t\treturn err\n\t}")
+		validationWriter.Write("main := new(internal)\n\terr = json.Unmarshal(buffer, main)\n\tif err != nil {\n\t\treturn err\n\t}")
 		validationWriter.CommonLine()
 
-		err := generateType(&ctx, &Path{
+		ignore, err := generateType(&ctx, &Path{
 			namedPath: []string{"main"},
 			quotePath: []string{},
 		}, imports, value.Type, false, typeWriter, fileWriter, validationWriter)
@@ -419,7 +425,7 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 		}
 
 		validationWriter.CommonLine()
-		validationWriter.Write(fmt.Sprintf("*self = %s(main)", value.RenderedName))
+		validationWriter.Write(fmt.Sprintf("*self = %s(*main)", value.RenderedName))
 		validationWriter.CommonLine()
 		validationWriter.Write("return nil")
 		validationWriter.Dedent()
@@ -428,8 +434,10 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 		fileWriter.CommonLine()
 		fileWriter.writer.Write(typeBuffer.Bytes())
 		fileWriter.CommonLine()
-		fileWriter.writer.Write(validationBuffer.Bytes())
-		fileWriter.CommonLine()
+		if !ignore {
+			fileWriter.writer.Write(validationBuffer.Bytes())
+			fileWriter.CommonLine()
+		}
 	}
 
 	packageParts := strings.Split(config.Package, "/")
