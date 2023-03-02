@@ -292,12 +292,14 @@ func generateObject(ctx *Context, path *Path, imports map[string]interface{}, de
 		writer.CommonLine()
 		writer.Write(fmt.Sprintf("%s ", name))
 		err := generateType(ctx, &Path{
-			namedPath: append(append([]string{}, path.namedPath...), name),
+			namedPath: append(append([]string{}, path.namedPath...), formatName(name)),
 			quotePath: append(append([]string{}, path.quotePath...), "\""+name+"\""),
 		}, imports, value, propOptional, writer, globalCode, validationCode)
 		if err != nil {
 			return err
 		}
+
+		writer.Write(fmt.Sprintf(" `json:\"%s\"`", name))
 	}
 
 	if optional {
