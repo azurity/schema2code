@@ -1,3 +1,3 @@
-module schema2code
+module github.com/azurity/schema2code
 
 go 1.18

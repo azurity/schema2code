@@ -3,8 +3,8 @@ package schema2code
 import (
 	"errors"
 	"fmt"
+	"github.com/azurity/schema2code/schemas"
 	"io"
-	"schema2code/schemas"
 	"strings"
 )
 
