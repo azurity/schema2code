@@ -57,7 +57,7 @@ func generateBoolean(ctx *Context, path *Path, imports map[string]interface{}, d
 
 func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
 	if optional {
-		writer.writer("*int")
+		writer.Write("*int")
 	} else {
 		writer.Write("int")
 	}
@@ -106,7 +106,7 @@ func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, d
 
 func generateNumber(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) error {
 	if optional {
-		writer.writer("*float64")
+		writer.Write("*float64")
 	} else {
 		writer.Write("float64")
 	}
