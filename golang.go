@@ -420,7 +420,14 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 
 	ctx := Context{}
 
-	for _, value := range types {
+	sortedType := sortKV{}
+	for name, value := range types {
+		sortedType = append(sortedType, sortableKV{name, value})
+	}
+	sort.Sort(sortedType)
+
+	for _, iter := range sortedType {
+		value := iter.value.(*TypeDesc)
 		if value.Type.Enum != nil {
 			if len(value.Type.Type) != 1 || value.Type.Type[0] != schemas.TypeNameString {
 				return errors.New("only support string enum")
@@ -526,13 +533,13 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 	writer.Write([]byte(fmt.Sprintf("package %s\n\n", packName)))
 	writer.Write([]byte("import (\n"))
 
-	sorted := []string{}
+	sortedPack := []string{}
 	for pack, _ := range imports {
-		sorted = append(sorted, pack)
+		sortedPack = append(sortedPack, pack)
 	}
-	sort.Strings(sorted)
+	sort.Strings(sortedPack)
 
-	for _, pack := range sorted {
+	for _, pack := range sortedPack {
 		writer.Write([]byte(fmt.Sprintf("\t\"%s\"\n", pack)))
 	}
 	writer.Write([]byte(")\n\n"))
