@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/azurity/schema2code/schemas"
 	"io"
+	"sort"
 	"strings"
 	"sync/atomic"
 )
@@ -263,6 +264,17 @@ func generateArray(ctx *Context, path *Path, imports map[string]interface{}, des
 	return ignore && !(desc.MinItems != nil || desc.MaxItems != nil), nil
 }
 
+type sortableKV struct {
+	key   string
+	value interface{}
+}
+
+type sortKV []sortableKV
+
+func (a sortKV) Len() int           { return len(a) }
+func (a sortKV) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a sortKV) Less(i, j int) bool { return a[i].key < a[j].key }
+
 func generateObject(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*struct{")
@@ -284,7 +296,15 @@ func generateObject(ctx *Context, path *Path, imports map[string]interface{}, de
 		validationCode.Indent()
 	}
 
+	sorted := sortKV{}
 	for name, value := range desc.Properties {
+		sorted = append(sorted, sortableKV{name, value})
+	}
+	sort.Sort(sorted)
+
+	for _, iter := range sorted {
+		name := iter.key
+		value := iter.value.(*schemas.Type)
 		propOptional := true
 		for _, item := range required {
 			if name == item {
@@ -505,7 +525,14 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 	packName := packageParts[len(packageParts)-1]
 	writer.Write([]byte(fmt.Sprintf("package %s\n\n", packName)))
 	writer.Write([]byte("import (\n"))
+
+	sorted := []string{}
 	for pack, _ := range imports {
+		sorted = append(sorted, pack)
+	}
+	sort.Strings(sorted)
+
+	for _, pack := range sorted {
 		writer.Write([]byte(fmt.Sprintf("\t\"%s\"\n", pack)))
 	}
 	writer.Write([]byte(")\n\n"))
