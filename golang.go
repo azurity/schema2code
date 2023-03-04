@@ -29,7 +29,7 @@ type Path struct {
 }
 
 func validationError(writer *CodeWriter, reason string) {
-	writer.Write(fmt.Sprintf("return errors.New(%s)", reason))
+	writer.Write(fmt.Sprintf("return errors.New(\"%s\")", reason))
 	// TODO: add more log here
 }
 
@@ -184,7 +184,7 @@ func generateString(ctx *Context, path *Path, imports map[string]interface{}, de
 	if useMinLength || useMaxLength {
 		validationCode.CommonLine()
 		validationCode.Write("if !")
-		validationCode.Write(fmt.Sprintf("StringValidation（%d， %d, %t, %t, %s%s)", minLen, maxLen, useMinLength, useMaxLength, prefix, stringName))
+		validationCode.Write(fmt.Sprintf("StringValidation(%d, %d, %t, %t, %s%s)", minLen, maxLen, useMinLength, useMaxLength, prefix, stringName))
 		validationCode.Write(" {")
 		validationCode.Indent()
 		validationError(validationCode, "string check length failed")
@@ -249,7 +249,7 @@ func generateArray(ctx *Context, path *Path, imports map[string]interface{}, des
 
 	validationCode.Write(fmt.Sprintf("for index, item := range %s {", arrayName))
 	validationCode.Indent()
-	ignore, err := generateType(ctx, &Path{
+	_, ignore, err := generateType(ctx, &Path{
 		namedPath: append(append([]string{}, path.namedPath[:len(path.namedPath)-1]...), path.namedPath[len(path.namedPath)-1]+"[index]"),
 		quotePath: append(append([]string{}, path.quotePath...), "index"),
 	}, imports, desc.Items, false, writer, globalCode, validationCode)
@@ -293,8 +293,8 @@ func generateObject(ctx *Context, path *Path, imports map[string]interface{}, de
 			}
 		}
 		writer.CommonLine()
-		writer.Write(fmt.Sprintf("%s ", name))
-		ignore, err := generateType(ctx, &Path{
+		writer.Write(fmt.Sprintf("%s ", formatName(name)))
+		_, ignore, err := generateType(ctx, &Path{
 			namedPath: append(append([]string{}, path.namedPath...), formatName(name)),
 			quotePath: append(append([]string{}, path.quotePath...), "\""+name+"\""),
 		}, imports, value, propOptional, writer, globalCode, validationCode)
@@ -318,14 +318,14 @@ func generateObject(ctx *Context, path *Path, imports map[string]interface{}, de
 }
 
 // ignore value & error
-func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (string, bool, error) {
 	if desc == nil {
-		return false, errors.New("must define type impl")
+		return "", false, errors.New("must define type impl")
 	}
 	if desc.Ref != nil {
 		parts := strings.Split(*desc.Ref, "/")
 		if parts[0] != "#" {
-			return false, errors.New("only local $ref is support")
+			return "", false, errors.New("only local $ref is support")
 		}
 		parts = parts[1:]
 		realName := []string{}
@@ -334,7 +334,7 @@ func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc
 				realName = append(realName, formatName(item))
 			} else {
 				if item != "$defs" && item != "definitions" {
-					return false, errors.New("wrong $ref format")
+					return "", false, errors.New("wrong $ref format")
 				}
 			}
 		}
@@ -342,30 +342,37 @@ func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc
 			writer.Write("*")
 		}
 		writer.Write(strings.Join(realName, ""))
-		return true, nil
+		return "", true, nil
 	}
 	if len(desc.Type) != 1 {
 		// TODO: try union later by use interface{}
-		return false, errors.New("multiple type is not supported")
+		return "", false, errors.New("multiple type is not supported")
 	}
 	// TODO: impl enum here
 	switch desc.Type[0] {
 	case schemas.TypeNameNull:
-		return generateNull(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		ign, err := generateNull(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		return "", ign, err
 	case schemas.TypeNameBoolean:
-		return generateBoolean(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		ign, err := generateBoolean(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		return "", ign, err
 	case schemas.TypeNameInteger:
-		return generateInteger(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		ign, err := generateInteger(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		return "0", ign, err
 	case schemas.TypeNameNumber:
-		return generateNumber(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		ign, err := generateNumber(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		return "float64(0)", ign, err
 	case schemas.TypeNameString:
-		return generateString(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		ign, err := generateString(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		return "\"\"", ign, err
 	case schemas.TypeNameArray:
-		return generateArray(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		ign, err := generateArray(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		return "[]interface{}{}", ign, err
 	case schemas.TypeNameObject:
-		return generateObject(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		ign, err := generateObject(ctx, path, imports, desc, optional, writer, globalCode, validationCode)
+		return "map[string]interface{}{}", ign, err
 	default:
-		return false, errors.New(fmt.Sprintf("unknown type %s", desc.Type[0]))
+		return "", false, errors.New(fmt.Sprintf("unknown type %s", desc.Type[0]))
 	}
 }
 
@@ -394,6 +401,59 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 	ctx := Context{}
 
 	for _, value := range types {
+		if value.Type.Enum != nil {
+			if len(value.Type.Type) != 1 || value.Type.Type[0] != schemas.TypeNameString {
+				return errors.New("only support string enum")
+			}
+
+			fileWriter.CommonLine()
+			fileWriter.Write(fmt.Sprintf("type %s string", value.RenderedName))
+			fileWriter.CommonLine()
+			fileWriter.Write("const (")
+			fileWriter.Indent()
+			for _, item := range value.Type.Enum {
+				if cased, ok := item.(string); !ok {
+					return errors.New("only support string enum")
+				} else {
+					fileWriter.CommonLine()
+					fileWriter.Write(fmt.Sprintf("%s%s %s = \"%s\"", value.RenderedName, formatName(cased), value.RenderedName, cased))
+				}
+			}
+			fileWriter.Dedent()
+			fileWriter.Write(")")
+			fileWriter.CommonLine()
+			fileWriter.Write(fmt.Sprintf("var enumValues%s = []string{", value.RenderedName))
+			for i, item := range value.Type.Enum {
+				if i != 0 {
+					fileWriter.Write(", ")
+				}
+				fileWriter.Write(fmt.Sprintf("\"%s\"", item.(string)))
+			}
+			fileWriter.Write("}")
+			fileWriter.CommonLine()
+			fileWriter.Write(fmt.Sprintf("func (object *%s) UnmarshalJSON(buffer []byte) error {", value.RenderedName))
+			fileWriter.Indent()
+
+			fileWriter.Write("raw := \"\"")
+			fileWriter.CommonLine()
+			fileWriter.Write("err := json.Unmarshal(buffer, &raw)\n\tif err != nil {\n\t\treturn err\n\t}")
+			fileWriter.CommonLine()
+			fileWriter.Write(fmt.Sprintf("if !EnumValidation(raw, enumValues%s) {", value.RenderedName))
+			fileWriter.Indent()
+			validationError(fileWriter, "wrong enum value")
+			fileWriter.Dedent()
+			fileWriter.Write("}")
+			fileWriter.CommonLine()
+
+			fileWriter.Write(fmt.Sprintf("*object = %s(raw)", value.RenderedName))
+			fileWriter.CommonLine()
+			fileWriter.Write("return nil")
+			fileWriter.Dedent()
+			fileWriter.Write("}")
+			fileWriter.CommonLine()
+			continue
+		}
+
 		typeBuffer := &bytes.Buffer{}
 		typeWriter := &CodeWriter{
 			writer: typeBuffer,
@@ -405,18 +465,10 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 			tab:    "\t",
 		}
 		typeWriter.Write(fmt.Sprintf("type %s ", value.RenderedName))
-		validationWriter.Write(fmt.Sprintf("func (self *%s) UnmarshalJSON(buffer []byte) error {", value.RenderedName))
-		validationWriter.Indent()
-		validationWriter.Write("raw := map[string]interface{}{}")
-		validationWriter.CommonLine()
-		validationWriter.Write("err := json.Unmarshal(buffer, &raw)\n\tif err != nil {\n\t\treturn err\n\t}")
-		validationWriter.CommonLine()
-		validationWriter.Write(fmt.Sprintf("type internal %s", value.RenderedName))
-		validationWriter.CommonLine()
-		validationWriter.Write("main := new(internal)\n\terr = json.Unmarshal(buffer, main)\n\tif err != nil {\n\t\treturn err\n\t}")
-		validationWriter.CommonLine()
 
-		ignore, err := generateType(&ctx, &Path{
+		validationWriter.Indent()
+
+		rawType, ignore, err := generateType(&ctx, &Path{
 			namedPath: []string{"main"},
 			quotePath: []string{},
 		}, imports, value.Type, false, typeWriter, fileWriter, validationWriter)
@@ -424,19 +476,28 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 			return err
 		}
 
-		validationWriter.CommonLine()
-		validationWriter.Write(fmt.Sprintf("*self = %s(*main)", value.RenderedName))
-		validationWriter.CommonLine()
-		validationWriter.Write("return nil")
-		validationWriter.Dedent()
-		validationWriter.Write("}")
-
 		fileWriter.CommonLine()
 		fileWriter.writer.Write(typeBuffer.Bytes())
 		fileWriter.CommonLine()
 		if !ignore {
+			fileWriter.Write(fmt.Sprintf("func (object *%s) UnmarshalJSON(buffer []byte) error {", value.RenderedName))
+			fileWriter.Indent()
+			fileWriter.Write(fmt.Sprintf("raw := %s", rawType))
+			fileWriter.CommonLine()
+			fileWriter.Write("err := json.Unmarshal(buffer, &raw)\n\tif err != nil {\n\t\treturn err\n\t}")
+			fileWriter.CommonLine()
+			fileWriter.Write(fmt.Sprintf("type internal %s", value.RenderedName))
+			fileWriter.CommonLine()
+			fileWriter.Write("main := new(internal)\n\terr = json.Unmarshal(buffer, main)\n\tif err != nil {\n\t\treturn err\n\t}")
+
 			fileWriter.writer.Write(validationBuffer.Bytes())
 			fileWriter.CommonLine()
+
+			fileWriter.Write(fmt.Sprintf("*object = %s(*main)", value.RenderedName))
+			fileWriter.CommonLine()
+			fileWriter.Write("return nil")
+			fileWriter.Dedent()
+			fileWriter.Write("}")
 		}
 	}
 
