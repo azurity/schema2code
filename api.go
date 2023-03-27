@@ -6,12 +6,14 @@ import (
 	"github.com/azurity/schema2code/common"
 	"github.com/azurity/schema2code/golang"
 	"github.com/azurity/schema2code/schemas"
+	"github.com/azurity/schema2code/typescript"
 	"io"
 	"strings"
 )
 
 type CommonConfig = common.CommonConfig
 type GolangConfig = golang.Config
+type TypescriptConfig = typescript.TypescriptConfig
 type TypeDesc = common.TypeDesc
 
 func walkDefs(baseKey []string, defs schemas.Definitions, action func(key []string, item *schemas.Type) error) error {
@@ -70,6 +72,8 @@ func Generate(reader io.Reader, writer io.Writer, config interface{}) error {
 	switch config.(type) {
 	case *GolangConfig:
 		return golang.GenerateCode(types, config.(*GolangConfig), writer)
+	case *TypescriptConfig:
+		return typescript.GenerateCode(types, config.(*TypescriptConfig), writer)
 	default:
 		return errors.New("unknown config type")
 	}

@@ -1,0 +1,120 @@
+function integerValidation(mini: number, maxi: number, useMini: boolean, useMaxi: boolean, exMini: boolean, exMaxi: boolean, multiple: number, useMultiple: boolean, data?: number): boolean {
+    if (data === undefined) {
+        return true;
+    }
+    if (useMini) {
+        if (exMini) {
+            if (data <= mini) {
+                return false;
+            }
+        } else {
+            if (data < mini) {
+                return false;
+            }
+        }
+    }
+
+    if (useMaxi) {
+        if (exMaxi) {
+            if (data <= maxi) {
+                return false;
+            }
+        } else {
+            if (data < maxi) {
+                return false;
+            }
+        }
+    }
+
+    if (useMultiple) {
+        if ((Math.round(data) != data) || data % multiple != 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function numberValidation(mini: number, maxi: number, useMini: boolean, useMaxi: boolean, exMini: boolean, exMaxi: boolean, multiple: number, useMultiple: boolean, data?: number): boolean {
+    if (data === undefined) {
+        return true
+    }
+    if (useMini) {
+        if (exMini) {
+            if (data <= mini) {
+                return false;
+            }
+        } else {
+            if (data < mini) {
+                return false;
+            }
+        }
+    }
+
+    if (useMaxi) {
+        if (exMaxi) {
+            if (data <= maxi) {
+                return false;
+            }
+        } else {
+            if (data < maxi) {
+                return false;
+            }
+        }
+    }
+
+    if (useMultiple) {
+        if (Math.round(data / multiple) * multiple != data) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function stringValidation(minLen: number, maxLen: number, useMin: boolean, useMax: boolean, data?: string): boolean {
+    if (data === undefined) {
+        return true;
+    }
+    if (useMin) {
+        if (data.length < minLen) {
+            return false;
+        }
+    }
+    if (useMax) {
+        if (data.length > maxLen) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function arrayValidation<T>(minItems: number, maxItems: number, useMin: boolean, useMax: boolean, unique: boolean, data?: T[]): boolean {
+    if (data === undefined) {
+        return true;
+    }
+    if (useMin) {
+        if (data.length < minItems) {
+            return false;
+        }
+    }
+    if (useMax) {
+        if (data.length > maxItems) {
+            return false;
+        }
+    }
+    if (unique) {
+        // TODO:
+    }
+    return true;
+}
+
+class $typedCheckerImpl {
+    check(type: string, main: any): Error | undefined {
+        if ($checkTable[type] == undefined) return undefined;
+        return $checkTable[type](main);
+    }
+}
+
+const $typedCheckerType = $typedCheckerImpl as { new(): $typedChecker; prototype: $typedChecker };
+const $typedCheckerInstance = new $typedCheckerType();
+export const $check = $typedCheckerInstance.check;
