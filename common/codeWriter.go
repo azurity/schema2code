@@ -1,10 +1,10 @@
-package schema2code
+package common
 
 import "io"
 
 type CodeWriter struct {
-	writer io.Writer
-	tab    string
+	Writer io.Writer
+	Tab    string
 	n      int
 }
 
@@ -27,14 +27,14 @@ func (w *CodeWriter) CommonLine() {
 
 func (w *CodeWriter) beginLine() {
 	for i := 0; i < w.n; i += 1 {
-		w.writer.Write([]byte(w.tab))
+		w.Writer.Write([]byte(w.Tab))
 	}
 }
 
 func (w *CodeWriter) endLine() {
-	w.writer.Write([]byte("\n"))
+	w.Writer.Write([]byte("\n"))
 }
 
 func (w *CodeWriter) Write(data string) {
-	w.writer.Write([]byte(data))
+	w.Writer.Write([]byte(data))
 }

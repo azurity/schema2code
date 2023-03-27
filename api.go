@@ -3,28 +3,16 @@ package schema2code
 import (
 	"errors"
 	"fmt"
+	"github.com/azurity/schema2code/common"
+	"github.com/azurity/schema2code/golang"
 	"github.com/azurity/schema2code/schemas"
 	"io"
 	"strings"
 )
 
-type CommonConfig struct {
-	RootType string
-}
-
-type IConfig interface {
-	Common() *CommonConfig
-}
-
-func (c *CommonConfig) Common() *CommonConfig {
-	return c
-}
-
-type TypeDesc struct {
-	Path         []string
-	RenderedName string
-	Type         *schemas.Type
-}
+type CommonConfig = common.CommonConfig
+type GolangConfig = golang.Config
+type TypeDesc = common.TypeDesc
 
 func walkDefs(baseKey []string, defs schemas.Definitions, action func(key []string, item *schemas.Type) error) error {
 	if defs == nil {
@@ -52,7 +40,7 @@ func Generate(reader io.Reader, writer io.Writer, config interface{}) error {
 		return err
 	}
 
-	casedConfig := config.(IConfig).Common()
+	casedConfig := config.(common.IConfig).Common()
 	types := map[string]*TypeDesc{}
 	if schema.ObjectAsType != nil {
 		if casedConfig.RootType == "" {
@@ -81,7 +69,7 @@ func Generate(reader io.Reader, writer io.Writer, config interface{}) error {
 
 	switch config.(type) {
 	case *GolangConfig:
-		return generateGolangCode(types, config.(*GolangConfig), writer)
+		return golang.GenerateCode(types, config.(*GolangConfig), writer)
 	default:
 		return errors.New("unknown config type")
 	}

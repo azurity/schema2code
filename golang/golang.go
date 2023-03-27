@@ -1,10 +1,11 @@
-package schema2code
+package golang
 
 import (
 	"bytes"
 	_ "embed"
 	"errors"
 	"fmt"
+	"github.com/azurity/schema2code/common"
 	"github.com/azurity/schema2code/schemas"
 	"io"
 	"sort"
@@ -15,8 +16,8 @@ import (
 //go:embed helper_go
 var helperCode []byte
 
-type GolangConfig struct {
-	CommonConfig
+type Config struct {
+	common.CommonConfig
 	Package string
 }
 
@@ -29,7 +30,7 @@ type Path struct {
 	quotePath []string
 }
 
-func validationError(writer *CodeWriter, reason string) {
+func validationError(writer *common.CodeWriter, reason string) {
 	writer.Write(fmt.Sprintf("return errors.New(\"%s\")", reason))
 	// TODO: add more log here
 }
@@ -42,12 +43,12 @@ func formatName(name string) string {
 	return strings.ToUpper(snake[:1]) + snake[1:]
 }
 
-func generateNull(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateNull(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (bool, error) {
 	writer.Write("*null")
 	return true, nil
 }
 
-func generateBoolean(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateBoolean(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*bool")
 	} else {
@@ -56,7 +57,7 @@ func generateBoolean(ctx *Context, path *Path, imports map[string]interface{}, d
 	return true, nil
 }
 
-func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*int")
 	} else {
@@ -105,7 +106,7 @@ func generateInteger(ctx *Context, path *Path, imports map[string]interface{}, d
 	return !(hasMini || hasMaxi || useMultiple), nil
 }
 
-func generateNumber(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateNumber(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*float64")
 	} else {
@@ -154,7 +155,7 @@ func generateNumber(ctx *Context, path *Path, imports map[string]interface{}, de
 	return !(hasMini || hasMaxi || useMultiple), nil
 }
 
-func generateString(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateString(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*")
 	}
@@ -209,7 +210,7 @@ func generateString(ctx *Context, path *Path, imports map[string]interface{}, de
 	return !(useMinLength || useMaxLength || desc.Pattern != nil), nil
 }
 
-func generateArray(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateArray(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (bool, error) {
 	if desc.AdditionalItems != nil {
 		return false, errors.New("only support single type array")
 	}
@@ -251,7 +252,7 @@ func generateArray(ctx *Context, path *Path, imports map[string]interface{}, des
 	validationCode.Write(fmt.Sprintf("for index, item := range %s {", arrayName))
 	validationCode.Indent()
 	_, ignore, err := generateType(ctx, &Path{
-		namedPath: append(append([]string{}, path.namedPath[:len(path.namedPath)-1]...), path.namedPath[len(path.namedPath)-1]+"[index]"),
+		namedPath: []string{"item"},
 		quotePath: append(append([]string{}, path.quotePath...), "index"),
 	}, imports, desc.Items, false, writer, globalCode, validationCode)
 	if err != nil {
@@ -275,7 +276,7 @@ func (a sortKV) Len() int           { return len(a) }
 func (a sortKV) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a sortKV) Less(i, j int) bool { return a[i].key < a[j].key }
 
-func generateObject(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (bool, error) {
+func generateObject(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (bool, error) {
 	if optional {
 		writer.Write("*struct{")
 	} else {
@@ -338,7 +339,7 @@ func generateObject(ctx *Context, path *Path, imports map[string]interface{}, de
 }
 
 // ignore value & error
-func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *CodeWriter, globalCode *CodeWriter, validationCode *CodeWriter) (string, bool, error) {
+func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc *schemas.Type, optional bool, writer *common.CodeWriter, globalCode *common.CodeWriter, validationCode *common.CodeWriter) (string, bool, error) {
 	if desc == nil {
 		return "", false, errors.New("must define type impl")
 	}
@@ -396,7 +397,7 @@ func generateType(ctx *Context, path *Path, imports map[string]interface{}, desc
 	}
 }
 
-func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer io.Writer) error {
+func GenerateCode(types map[string]*common.TypeDesc, config *Config, writer io.Writer) error {
 	for key, value := range types {
 		rendered := []string{}
 		for _, it := range value.Path {
@@ -406,9 +407,9 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 	}
 
 	fileBuffer := &bytes.Buffer{}
-	fileWriter := &CodeWriter{
-		writer: fileBuffer,
-		tab:    "\t",
+	fileWriter := &common.CodeWriter{
+		Writer: fileBuffer,
+		Tab:    "\t",
 	}
 
 	imports := map[string]interface{}{
@@ -427,7 +428,7 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 	sort.Sort(sortedType)
 
 	for _, iter := range sortedType {
-		value := iter.value.(*TypeDesc)
+		value := iter.value.(*common.TypeDesc)
 		if value.Type.Enum != nil {
 			if len(value.Type.Type) != 1 || value.Type.Type[0] != schemas.TypeNameString {
 				return errors.New("only support string enum")
@@ -482,14 +483,14 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 		}
 
 		typeBuffer := &bytes.Buffer{}
-		typeWriter := &CodeWriter{
-			writer: typeBuffer,
-			tab:    "\t",
+		typeWriter := &common.CodeWriter{
+			Writer: typeBuffer,
+			Tab:    "\t",
 		}
 		validationBuffer := &bytes.Buffer{}
-		validationWriter := &CodeWriter{
-			writer: validationBuffer,
-			tab:    "\t",
+		validationWriter := &common.CodeWriter{
+			Writer: validationBuffer,
+			Tab:    "\t",
 		}
 		typeWriter.Write(fmt.Sprintf("type %s ", value.RenderedName))
 
@@ -504,7 +505,7 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 		}
 
 		fileWriter.CommonLine()
-		fileWriter.writer.Write(typeBuffer.Bytes())
+		fileWriter.Writer.Write(typeBuffer.Bytes())
 		fileWriter.CommonLine()
 		if !ignore {
 			fileWriter.Write(fmt.Sprintf("func (object *%s) UnmarshalJSON(buffer []byte) error {", value.RenderedName))
@@ -517,7 +518,7 @@ func generateGolangCode(types map[string]*TypeDesc, config *GolangConfig, writer
 			fileWriter.CommonLine()
 			fileWriter.Write("main := new(internal)\n\terr = json.Unmarshal(buffer, main)\n\tif err != nil {\n\t\treturn err\n\t}")
 
-			fileWriter.writer.Write(validationBuffer.Bytes())
+			fileWriter.Writer.Write(validationBuffer.Bytes())
 			fileWriter.CommonLine()
 
 			fileWriter.Write(fmt.Sprintf("*object = %s(*main)", value.RenderedName))
