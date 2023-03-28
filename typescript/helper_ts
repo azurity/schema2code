@@ -109,9 +109,8 @@ function arrayValidation<T>(minItems: number, maxItems: number, useMin: boolean,
 }
 
 class $typedCheckerImpl {
-    check(type: string, main: any): Error | undefined {
-        if ($checkTable[type] == undefined) return undefined;
-        return $checkTable[type](main);
+    check(type: string, main: any) {
+        if ($checkTable[type] !== undefined) $checkTable[type](main);
     }
 }
 

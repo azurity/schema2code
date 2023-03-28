@@ -30,7 +30,7 @@ type Path struct {
 }
 
 func validationError(writer *common.CodeWriter, reason string) {
-	writer.Write(fmt.Sprintf("return new Error(\"%s\");", reason))
+	writer.Write(fmt.Sprintf("throw new Error(\"%s\");", reason))
 	// TODO: add more log here
 }
 
@@ -313,12 +313,7 @@ func generateType(ctx *Context, path *Path, desc *schemas.Type, writer *common.C
 		writer.Write(strings.Join(realName, ""))
 
 		validationCode.CommonLine()
-		validationCode.Write("{")
-		validationCode.Indent()
-		validationCode.Write(fmt.Sprintf("let err = ($checkTable[\"%s\"] === undeifned ? undefined : $checkTable[\"%s\"](%s));", strings.Join(realName, ""), strings.Join(realName, ""), strings.Join(path.namedPath, "")))
-		validationCode.Write(fmt.Sprintf("if (err != undefined) return err;"))
-		validationCode.Dedent()
-		validationCode.Write("}")
+		validationCode.Write(fmt.Sprintf("if ($checkTable[\"%s\"] !== undeifned) $checkTable[\"%s\"](%s);", strings.Join(realName, ""), strings.Join(realName, ""), strings.Join(path.namedPath, "")))
 
 		return true, nil
 	}
@@ -385,7 +380,7 @@ func GenerateCode(types map[string]*common.TypeDesc, config *TypescriptConfig, w
 		Tab:    "    ",
 	}
 	globalValidationWriter.CommonLine()
-	globalValidationWriter.Write("const $checkTable: Record<string, (main: any) => Error | undefined> = {")
+	globalValidationWriter.Write("const $checkTable: Record<string, (main: any) => void> = {")
 	globalValidationWriter.Indent()
 
 	fileWriter.CommonLine()
@@ -402,7 +397,7 @@ func GenerateCode(types map[string]*common.TypeDesc, config *TypescriptConfig, w
 	fileWriter.CommonLine()
 	fileWriter.Write("interface $typedChecker extends $typedCheckerImpl {")
 	fileWriter.Indent()
-	fileWriter.Write("check<K extends keyof $typelist>(type: K, main: $typelist[K]): Error | undefined;")
+	fileWriter.Write("check<K extends keyof $typelist>(type: K, main: $typelist[K]): void;")
 	fileWriter.Dedent()
 	fileWriter.Write("}")
 	fileWriter.CommonLine()
@@ -432,7 +427,7 @@ func GenerateCode(types map[string]*common.TypeDesc, config *TypescriptConfig, w
 			globalValidationWriter.CommonLine()
 			globalValidationWriter.Write(fmt.Sprintf("\"%s\": function (main?: %s) {", value.RenderedName, value.RenderedName))
 			globalValidationWriter.Indent()
-			globalValidationWriter.Write("if (main === undefined) return undefined;")
+			globalValidationWriter.Write("if (main === undefined) return;")
 			globalValidationWriter.CommonLine()
 			globalValidationWriter.Write(fmt.Sprintf("if (!new Set<string>(Object.values(%s)).has(main)) {", value.RenderedName))
 			globalValidationWriter.Indent()
@@ -440,7 +435,7 @@ func GenerateCode(types map[string]*common.TypeDesc, config *TypescriptConfig, w
 			globalValidationWriter.Dedent()
 			globalValidationWriter.Write("}")
 			globalValidationWriter.CommonLine()
-			globalValidationWriter.Write("return undefined;")
+			globalValidationWriter.Write("return;")
 			globalValidationWriter.Dedent()
 			globalValidationWriter.Write("},")
 			continue
@@ -475,12 +470,12 @@ func GenerateCode(types map[string]*common.TypeDesc, config *TypescriptConfig, w
 			globalValidationWriter.CommonLine()
 			globalValidationWriter.Write(fmt.Sprintf("\"%s\": function (main?: %s) {", value.RenderedName, value.RenderedName))
 			globalValidationWriter.Indent()
-			globalValidationWriter.Write("if (main === undefined) return undefined;")
+			globalValidationWriter.Write("if (main === undefined) return;")
 
 			globalValidationWriter.Writer.Write(validationBuffer.Bytes())
 
 			globalValidationWriter.CommonLine()
-			globalValidationWriter.Write("return undefined")
+			globalValidationWriter.Write("return;")
 			globalValidationWriter.Dedent()
 			globalValidationWriter.Write("},")
 		}
